@@ -1,0 +1,179 @@
+# Complete GitLab CI/CD Pipeline
+# Includes: Build, Test, Security, Deploy
+
+stages:
+  - build
+  - test
+  - security
+  - deploy
+
+variables:
+  NODE_VERSION: "18"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# ========================================
+# BUILD
+# ========================================
+
+build:
+  stage: build
+  image: node:${NODE_VERSION}
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
+# ========================================
+# TEST
+# ========================================
+
+test:unit:
+  stage: test
+  image: node:${NODE_VERSION}
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+  script:
+    - npm ci
+    - npm run test:unit
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+
+test:integration:
+  stage: test
+  image: node:${NODE_VERSION}
+  services:
+    - postgres:14
+  variables:
+    POSTGRES_DB: test_db
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+  script:
+    - npm ci
+    - npm run test:integration
+
+# ========================================
+# SECURITY
+# ========================================
+
+security:dependency-scan:
+  stage: security
+  image: node:${NODE_VERSION}
+  script:
+    - npm audit --audit-level=moderate
+  allow_failure: true
+
+security:container-scan:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+  allow_failure: true
+
+security:sast:
+  stage: security
+  image: returntocorp/semgrep
+  script:
+    - semgrep --config=auto .
+  allow_failure: true
+
+# ========================================
+# BUILD DOCKER IMAGE
+# ========================================
+
+docker:build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
+        docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+        docker push $CI_REGISTRY_IMAGE:latest
+      fi
+
+# ========================================
+# DEPLOY TO STAGING
+# ========================================
+
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to staging..."
+    # Add your deployment script
+  environment:
+    name: staging
+    url: https://staging.example.com
+    on_stop: stop:staging
+  only:
+    - develop
+
+stop:staging:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Stopping staging environment..."
+  environment:
+    name: staging
+    action: stop
+  when: manual
+  only:
+    - develop
+
+# ========================================
+# DEPLOY TO PRODUCTION
+# ========================================
+
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to production..."
+    # Add your deployment script
+  environment:
+    name: production
+    url: https://example.com
+  only:
+    - main
+  when: manual
+
+# ========================================
+# ROLLBACK
+# ========================================
+
+rollback:production:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Rolling back production..."
+    # Add your rollback script
+  environment:
+    name: production
+  when: manual
+  only:
+    - main
