@@ -590,6 +590,246 @@ kubectl top pods
 kubectl top nodes
 ```
 
+## Portainer CE - Container Management UI
+
+Portainer CE provides a powerful web-based UI for managing Docker containers and Kubernetes clusters.
+
+### Install Portainer CE
+
+**Docker (Standalone):**
+```powershell
+# Create volume for Portainer data
+docker volume create portainer_data
+
+# Run Portainer CE
+docker run -d `
+  -p 8000:8000 `
+  -p 9443:9443 `
+  --name portainer `
+  --restart=always `
+  -v /var/run/docker.sock:/var/run/docker.sock `
+  -v portainer_data:/data `
+  portainer/portainer-ce:latest
+```
+
+**Docker Compose:**
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+volumes:
+  portainer_data:
+```
+
+**Kubernetes:**
+```powershell
+# Install using Helm
+helm repo add portainer https://portainer.github.io/k8s/
+helm repo update
+
+# Install Portainer
+helm install portainer portainer/portainer `
+  --create-namespace `
+  --namespace portainer `
+  --set service.type=LoadBalancer
+```
+
+**Kubernetes (Manual):**
+```yaml
+# portainer.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: portainer
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: portainer-sa
+  namespace: portainer
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: portainer-crb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: portainer-sa
+  namespace: portainer
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portainer-pvc
+  namespace: portainer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portainer
+  namespace: portainer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portainer
+  template:
+    metadata:
+      labels:
+        app: portainer
+    spec:
+      serviceAccountName: portainer-sa
+      containers:
+      - name: portainer
+        image: portainer/portainer-ce:latest
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        - containerPort: 8000
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: portainer-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portainer
+  namespace: portainer
+spec:
+  type: LoadBalancer
+  selector:
+    app: portainer
+  ports:
+  - name: https
+    port: 9443
+    targetPort: 9443
+  - name: edge
+    port: 8000
+    targetPort: 8000
+```
+
+### Access Portainer
+
+```powershell
+# Docker (local)
+# Open browser to: https://localhost:9443
+
+# Kubernetes (port-forward)
+kubectl port-forward -n portainer svc/portainer 9443:9443
+
+# Kubernetes (LoadBalancer)
+kubectl get svc -n portainer portainer
+# Access via LoadBalancer IP
+```
+
+### Portainer Features
+
+**Container Management:**
+- View and manage containers
+- Start, stop, restart containers
+- View logs and stats
+- Execute commands in containers
+- Inspect container details
+
+**Image Management:**
+- Pull and push images
+- Build images from Dockerfiles
+- Scan images for vulnerabilities
+- Manage image tags
+
+**Volume Management:**
+- Create and delete volumes
+- Browse volume contents
+- Backup and restore volumes
+
+**Network Management:**
+- Create custom networks
+- Manage network drivers
+- View network topology
+
+**Kubernetes Management:**
+- Manage clusters
+- Deploy applications
+- View and edit manifests
+- Manage namespaces
+- Monitor resources
+
+**Stack Deployment:**
+- Deploy Docker Compose stacks
+- Manage Kubernetes applications
+- Template management
+- Environment variables
+
+### Portainer Best Practices
+
+**Security:**
+```powershell
+# Use HTTPS only
+# Set strong admin password
+# Enable RBAC
+# Restrict access by IP
+# Use secrets for sensitive data
+```
+
+**Backup:**
+```powershell
+# Backup Portainer data
+docker run --rm -v portainer_data:/data -v $(pwd):/backup alpine tar czf /backup/portainer-backup.tar.gz /data
+
+# Restore Portainer data
+docker run --rm -v portainer_data:/data -v $(pwd):/backup alpine tar xzf /backup/portainer-backup.tar.gz -C /
+```
+
+**Multi-Environment:**
+- Use Portainer Business for multiple endpoints
+- Connect remote Docker hosts
+- Manage multiple Kubernetes clusters
+- Centralized management
+
+### Integration with CI/CD
+
+```yaml
+# Deploy via Portainer API
+- name: Deploy to Portainer
+  run: |
+    curl -X POST https://portainer.example.com/api/stacks \
+      -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
+      -F "Name=myapp" \
+      -F "StackFileContent=@docker-compose.yml"
+```
+
 ## Best Practices Checklist
 
 - [ ] Use multi-stage builds
