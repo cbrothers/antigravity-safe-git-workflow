@@ -51,7 +51,6 @@ if ($pathIsGitTracked -and -not [string]::IsNullOrWhiteSpace($BranchName)) {
     $currentBranch = git branch --show-current
     if ($currentBranch -ne $BranchName) {
         Write-Host "GIT :: Switching to feature branch '$BranchName'..." -ForegroundColor Cyan
-        # Try checkout, else create
         git checkout $BranchName 2>$null
         if ($LASTEXITCODE -ne 0) {
             git checkout -b $BranchName
@@ -68,30 +67,43 @@ if ($pathIsGitTracked) {
 }
 
 # ---------------------------------------------------------
-# 2. Apply Patch (Flexible Logic)
+# 2. Apply Patch (FIXED: Line Ending Normalization)
 # ---------------------------------------------------------
-# Force UTF8 to ensure consistent behavior for code files
 $originalContent = Get-Content -Path $targetPath -Raw -Encoding UTF8
 
-# Try Exact
-if ($originalContent.Contains($searchText)) {
+# Normalize line endings to LF for consistent matching
+$normalizedContent = $originalContent -replace "`r`n", "`n"
+$normalizedSearch = $searchText -replace "`r`n", "`n"
+
+# Try Exact match (after normalization)
+if ($normalizedContent.Contains($normalizedSearch)) {
     Write-Host "MATCH :: Exact match." -ForegroundColor Green
-    $newContent = $originalContent.Replace($searchText, $replaceText)
+    $newContent = $normalizedContent.Replace($normalizedSearch, $replaceText)
 }
 else {
-    # Try Flexible
-    Write-Host "RETRY :: Relaxing whitespace..." -ForegroundColor Yellow
-    $escapedSearch = [regex]::Escape($searchText)
-    $flexiblePattern = $escapedSearch -replace "\\r", "" -replace "\\n", "" -replace "\\s+", "\s+"
+    # Try Flexible: Split into tokens and match with flexible whitespace
+    Write-Host "RETRY :: Attempting flexible whitespace match..." -ForegroundColor Yellow
+    
+    $tokens = $normalizedSearch -split '\s+' | Where-Object { $_ -ne "" }
+    
+    if ($tokens.Count -eq 0) {
+        Write-Error "FAILURE :: Search text contains only whitespace."
+    }
+    
+    $escapedTokens = $tokens | ForEach-Object { [regex]::Escape($_) }
+    $flexiblePattern = $escapedTokens -join '\s+'
+    
     $regex = [regex]::new($flexiblePattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
     
-    if ($regex.Matches($originalContent).Count -eq 0) {
-        Write-Error "FAILURE :: Content not found."
+    if ($regex.Matches($normalizedContent).Count -eq 0) {
+        Write-Error "FAILURE :: Content not found even with flexible matching."
     }
-    $newContent = $regex.Replace($originalContent, $replaceText, 1)
+    
+    Write-Host "MATCH :: Flexible whitespace match found." -ForegroundColor Green
+    $newContent = $regex.Replace($normalizedContent, $replaceText, 1)
 }
 
-# Write to disk (Enforce UTF8 NoBOM for modern code compatibility)
+# Write to disk
 $newContent | Set-Content -Path $targetPath -NoNewline -Encoding UTF8
 
 # ---------------------------------------------------------
@@ -99,7 +111,6 @@ $newContent | Set-Content -Path $targetPath -NoNewline -Encoding UTF8
 # ---------------------------------------------------------
 
 if ($pathIsGitTracked) {
-    # Check what happened using Git
     $diff = git diff --no-color --unified=0 $targetPath
     
     if (-not [string]::IsNullOrWhiteSpace($diff)) {
@@ -108,7 +119,6 @@ if ($pathIsGitTracked) {
         Write-Host $diff
         Write-Host "--- GIT DIFF END ---`n" -ForegroundColor Gray
         
-        # Optional: Auto-commit if in feature branch
         if (-not [string]::IsNullOrWhiteSpace($BranchName)) {
             git add $targetPath
             git commit -m "AI Patch: Update $targetPath"
