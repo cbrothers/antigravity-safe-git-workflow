@@ -18,14 +18,17 @@ When commenting on issues, the agent identifies itself as:
 
 ### 1. Starting Work on an Issue
 
-Before beginning any development task:
+**⚠️ CRITICAL: Update project board status BEFORE writing any code!**
 
 ```powershell
 // turbo
-# Assign issue to yourself and add "in-progress" label
+# Step 1: Move issue to "In Progress" on project board
+pwsh .\scripts\Update-ProjectStatus.ps1 -IssueNumber <issue-number> -Status "In Progress"
+
+# Step 2: Assign issue to yourself and add "in-progress" label
 gh issue edit <issue-number> --add-label "in-progress" --repo cbrothers/merchifai
 
-# Comment on the issue
+# Step 3: Comment on the issue
 gh issue comment <issue-number> --repo cbrothers/merchifai --body "🤖 **Antigravity AI Agent** started work on this issue.
 
 **Planned approach:**
@@ -33,6 +36,13 @@ gh issue comment <issue-number> --repo cbrothers/merchifai --body "🤖 **Antigr
 
 **Estimated completion:** [timeframe]"
 ```
+
+**Why this matters:**
+- Prevents duplicate work
+- Keeps team informed in real-time
+- Ensures project board reflects current reality
+- Establishes clear accountability
+
 
 ### 2. During Development
 
