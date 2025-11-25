@@ -138,12 +138,28 @@ Write-Host "  cache keys 'cmd:*'" -ForegroundColor White
 Write-Host ""
 
 # Test connection
+$script:CacheAvailable = $false
 try {
     $result = Invoke-CacheCommand -Command ping
     if ($result -eq "PONG") {
         Write-Host "🎉 Cache is online!" -ForegroundColor Green
+        $script:CacheAvailable = $true
     }
 }
 catch {
-    Write-Host "⚠️  Connection test failed: $_" -ForegroundColor Yellow
+    Write-Host "⚠️  Redis cache unavailable: $_" -ForegroundColor Yellow
+    Write-Host "   Falling back to .agent/memory.md for shorthand lookups" -ForegroundColor Gray
+    $script:CacheAvailable = $false
 }
+
+# Fallback: Read from .agent/memory.md if cache is down
+if (-not $script:CacheAvailable) {
+    $memoryFile = ".agent\memory.md"
+    if (Test-Path $memoryFile) {
+        Write-Host "✅ Using local memory file: $memoryFile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "⚠️  No fallback available. Create .agent\memory.md for offline shorthand." -ForegroundColor Yellow
+    }
+}
+
