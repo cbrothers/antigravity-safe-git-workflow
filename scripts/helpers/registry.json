@@ -1,0 +1,38 @@
+{
+    "helpers": {
+        "git-commit": {
+            "description": "Commits changes with conventional commit message",
+            "params": [
+                "message",
+                "files",
+                "type"
+            ],
+            "returns": "commit_hash"
+        },
+        "issue-update": {
+            "description": "Updates GitHub issue status and adds comments",
+            "params": [
+                "issue_number",
+                "action",
+                "comment"
+            ],
+            "returns": "issue_url"
+        },
+        "file-search": {
+            "description": "Searches for patterns in files and returns matches",
+            "params": [
+                "pattern",
+                "path",
+                "extensions"
+            ],
+            "returns": "matches[]"
+        },
+        "code-analyze": {
+            "description": "Analyzes code structure and returns summary",
+            "params": [
+                "file_path"
+            ],
+            "returns": "analysis"
+        }
+    }
+}
